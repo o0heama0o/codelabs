@@ -15,6 +15,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   pedantic: ^1.11.0
+  cloud_firestore: ^1.0.0
+  firebase_auth: ^1.0.0
+  google_fonts: ^2.0.0
+  provider: ^5.0.0
 
 flutter:
   uses-material-design: true
