@@ -45,7 +45,8 @@ class Authentication extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    switch (loginState) {
+    switch (loginState) { //HomePage에서 받아온 loginstate
+      //log out 상황인 경우(로그인이 필요한 경우)
       case ApplicationLoginState.loggedOut:
         return Row(
           children: [
@@ -60,18 +61,24 @@ class Authentication extends StatelessWidget {
             ),
           ],
         );
+
+      //사용자가 email을 입력한 경우
       case ApplicationLoginState.emailAddress:
         return EmailForm(
             callback: (email) => verifyEmail(
-                email, (e) => _showErrorDialog(context, 'Invalid email', e)));
+                email, (e) => _showErrorDialog(context, 'Invalid email', e))); // (e)=> 이 부분은 verifyEmail이 실패하면 없는 이메일이니 에러를 띄우라는 것
+
+      //이메일 입력이 성공하고나서 사용자가 패드워드를 입력한 경우
       case ApplicationLoginState.password:
         return PasswordForm(
           email: email!,
           login: (email, password) {
             signInWithEmailAndPassword(email, password,
-                (e) => _showErrorDialog(context, 'Failed to sign in', e));
+                (e) => _showErrorDialog(context, 'Failed to sign in', e)); // (e)=> 이 부분은 signInWithEmailAndPassword 실패하면 없는 계정이니 에러 띄우기
           },
         );
+
+      //appstate가 회원가입을 해야하는 경우
       case ApplicationLoginState.register:
         return RegisterForm(
           email: email!,
@@ -91,14 +98,16 @@ class Authentication extends StatelessWidget {
                     _showErrorDialog(context, 'Failed to create account', e));
           },
         );
+
+      // 로그인인 경우
       case ApplicationLoginState.loggedIn:
         return Row(
           children: [
-            Padding(
+            Padding( //로그아웃 버튼을 보여준다.
               padding: const EdgeInsets.only(left: 24, bottom: 8),
               child: StyledButton(
                 onPressed: () {
-                  signOut();
+                  signOut(); //누르면 로그아웃됨.
                 },
                 child: Text('LOGOUT'),
               ),
@@ -114,6 +123,7 @@ class Authentication extends StatelessWidget {
     }
   }
 
+  //위에서 띄우는 에러 부분
   void _showErrorDialog(BuildContext context, String title, Exception e) {
     showDialog<void>(
       context: context,
