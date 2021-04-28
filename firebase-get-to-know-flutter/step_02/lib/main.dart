@@ -21,6 +21,7 @@ void main() {
 
 //main()에서 호출
 class App extends StatelessWidget {
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -92,7 +93,7 @@ class HomePage extends StatelessWidget {
                   GuestBook(
                     addMessage: (String message) =>
                         appState.addMessageToGuestBook(message),
-                    messages: appState.guestBookMessages,
+                    messages: appState.guestBookMessages, // new
                   ),
                 ],
               ],
@@ -256,12 +257,10 @@ class _GuestBookState extends State<GuestBook> {
   final _controller = TextEditingController();
 
   @override
-  // Modify from here
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // to here.
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: Form(
@@ -302,12 +301,13 @@ class _GuestBookState extends State<GuestBook> {
             ),
           ),
         ),
-        // Modify from here
         SizedBox(height: 8),
         for (var message in widget.messages)
-          Paragraph('${message.name}: ${message.message}'),
+          Text(
+              '${message.name}: ${message.message}'
+          ),
+          //Paragraph('${message.name}: ${message.message}'),
         SizedBox(height: 8),
-        // to here.
       ],
     );
   }
