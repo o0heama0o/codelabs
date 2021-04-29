@@ -1,15 +1,18 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';  //cloud firestore 사용을 위한 import
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'src/authentication.dart';
 import 'src/widgets.dart';
 
-void main() {
+
+void main() async{
+  //WidgetsFlutterBinding.ensureInitialized();
+  //await Firebase.initializeApp();
   runApp(
     //changeNotifierProvider 하위에 있는건 다 listener가 된다.
     ChangeNotifierProvider(
@@ -21,7 +24,6 @@ void main() {
 
 //main()에서 호출
 class App extends StatelessWidget {
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -88,12 +90,26 @@ class HomePage extends StatelessWidget {
             builder: (context, appState, _) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Add from here
+                if (appState.attendees >= 2)
+                  Paragraph('${appState.attendees} people going')
+                else if (appState.attendees == 1)
+                  Paragraph('1 person going')
+                else
+                  Paragraph('No one going'),
+                // To here.
                 if (appState.loginState == ApplicationLoginState.loggedIn) ...[
+                  // Add from here
+                  YesNoSelection(
+                    state: appState.attending,
+                    onSelection: (attending) => appState.attending = attending,
+                  ),
+                  // To here.
                   Header('Discussion'),
                   GuestBook(
                     addMessage: (String message) =>
                         appState.addMessageToGuestBook(message),
-                    messages: appState.guestBookMessages, // new
+                    messages: appState.guestBookMessages,
                   ),
                 ],
               ],
@@ -115,6 +131,16 @@ class ApplicationState extends ChangeNotifier {
   //login과 logout 상태만 계속 체크하는 듯
   Future<void> init() async {
     await Firebase.initializeApp(); //이게 끝날 때 까지 뒤에는 실행 안됨.
+
+    FirebaseFirestore.instance
+        .collection('attendees')
+        .where('attending', isEqualTo: true)
+        .snapshots()
+        .listen((snapshot) {
+      _attendees = snapshot.docs.length;
+      notifyListeners();
+    });
+
     //로그인하기 (firebase로 부터 로그인 여부가 들어오는지 계속 listen하고있음)
     FirebaseAuth.instance.userChanges().listen((user) {
       if (user != null) {
@@ -130,32 +156,37 @@ class ApplicationState extends ChangeNotifier {
           snapshot.docs.forEach((document) {
             _guestBookMessages.add(
               GuestBookMessage(
-                name: document.data()['name'],
+                //name: document.data()['name'],
+                name : 'name',
                 message: document.data()['text'],
               ),
             );
           });
           notifyListeners();
         });
+        _attendingSubscription = FirebaseFirestore.instance
+            .collection('attendees')
+            .doc(user.uid)
+            .snapshots()
+            .listen((snapshot) {
+          if (snapshot.data() != null) {
+            if (snapshot.data()!['attending']) {
+              _attending = Attending.yes;
+            } else {
+              _attending = Attending.no;
+            }
+          } else {
+            _attending = Attending.unknown;
+          }
+          notifyListeners();
+        });
       } else {
         _loginState = ApplicationLoginState.loggedOut;
         _guestBookMessages = [];
         _guestBookSubscription?.cancel();
+        _attendingSubscription?.cancel();
       }
       notifyListeners(); // 리스너한테 알리기
-    });
-  }
-
-  Future<DocumentReference> addMessageToGuestBook(String message) {
-    if (_loginState != ApplicationLoginState.loggedIn) {
-      throw Exception('Must be logged in');
-    }
-
-    return FirebaseFirestore.instance.collection('guestbook').add({
-      'text': message,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-      'name': FirebaseAuth.instance.currentUser!.displayName,
-      'userId': FirebaseAuth.instance.currentUser!.uid,
     });
   }
 
@@ -169,6 +200,23 @@ class ApplicationState extends ChangeNotifier {
   List<GuestBookMessage> _guestBookMessages = [];
   List<GuestBookMessage> get guestBookMessages => _guestBookMessages;
 
+  int _attendees = 0;
+  int get attendees => _attendees;
+
+  Attending _attending = Attending.unknown;
+  StreamSubscription<DocumentSnapshot>? _attendingSubscription;
+  Attending get attending => _attending;
+  set attending(Attending attending) {
+    final userDoc = FirebaseFirestore.instance
+        .collection('attendees')
+        .doc(FirebaseAuth.instance.currentUser!.uid);
+    if (attending == Attending.yes) {
+      userDoc.set({'attending': true});
+    } else {
+      userDoc.set({'attending': false});
+    }
+  }
+
   //login flow 호출
   void startLoginFlow() {
     _loginState = ApplicationLoginState.emailAddress; // loginstate 업데이트  ( applicationLoginState는 authentication.dart에)
@@ -181,8 +229,7 @@ class ApplicationState extends ChangeNotifier {
       void Function(FirebaseAuthException e) errorCallback,
       ) async {
     try {
-      var methods =
-      await FirebaseAuth.instance.fetchSignInMethodsForEmail(email);
+      var methods = await FirebaseAuth.instance.fetchSignInMethodsForEmail(email);
 
       //가입이 되어있는 경우
       if (methods.contains('password')) {//(fb의'password'에 유저가 입력한 정보가 있으면 이제 로그인하면되는)
@@ -237,10 +284,31 @@ class ApplicationState extends ChangeNotifier {
   void signOut() {
     FirebaseAuth.instance.signOut();
   }
+
+  Future<DocumentReference> addMessageToGuestBook(String message) {
+    if (_loginState != ApplicationLoginState.loggedIn) {
+      throw Exception('Must be logged in');
+    }
+
+    return FirebaseFirestore.instance.collection('guestbook').add({
+      'text': message,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'name': FirebaseAuth.instance.currentUser!.displayName,
+      'userId': FirebaseAuth.instance.currentUser!.uid,
+    });
+  }
 }
 
 
 //----------------for messaging(Cloud Firestore)----------------
+
+class GuestBookMessage {
+  GuestBookMessage({required this.name, required this.message});
+  final String name;
+  final String message;
+}
+
+enum Attending { yes, no, unknown }
 
 //새 상태 저장을 위한 위젯
 class GuestBook extends StatefulWidget {
@@ -257,10 +325,12 @@ class _GuestBookState extends State<GuestBook> {
   final _controller = TextEditingController();
 
   @override
+  // Modify from here
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // to here.
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: Form(
@@ -301,20 +371,87 @@ class _GuestBookState extends State<GuestBook> {
             ),
           ),
         ),
+        // Modify from here
         SizedBox(height: 8),
         for (var message in widget.messages)
-          Text(
-              '${message.name}: ${message.message}'
-          ),
           //Paragraph('${message.name}: ${message.message}'),
+          Paragraph('name: ${message.message}'),
         SizedBox(height: 8),
+        SizedBox(
+          height: 8,
+          child: const DecoratedBox(
+            decoration: const BoxDecoration(
+                color: Colors.red
+            ),
+          ),
+        ),
       ],
+      // to here.
     );
   }
 }
 
-class GuestBookMessage {
-  GuestBookMessage({required this.name, required this.message});
-  final String name;
-  final String message;
+class YesNoSelection extends StatelessWidget {
+  const YesNoSelection({required this.state, required this.onSelection});
+  final Attending state;
+  final void Function(Attending selection) onSelection;
+
+  @override
+  Widget build(BuildContext context) {
+    switch (state) {
+      case Attending.yes:
+        return Padding(
+          padding: EdgeInsets.all(8.0),
+          child: Row(
+            children: [
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(elevation: 0),
+                onPressed: () => onSelection(Attending.yes),
+                child: Text('YES'),
+              ),
+              SizedBox(width: 8),
+              TextButton(
+                onPressed: () => onSelection(Attending.no),
+                child: Text('NO'),
+              ),
+            ],
+          ),
+        );
+      case Attending.no:
+        return Padding(
+          padding: EdgeInsets.all(8.0),
+          child: Row(
+            children: [
+              TextButton(
+                onPressed: () => onSelection(Attending.yes),
+                child: Text('YES'),
+              ),
+              SizedBox(width: 8),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(elevation: 0),
+                onPressed: () => onSelection(Attending.no),
+                child: Text('NO'),
+              ),
+            ],
+          ),
+        );
+      default:
+        return Padding(
+          padding: EdgeInsets.all(8.0),
+          child: Row(
+            children: [
+              StyledButton(
+                onPressed: () => onSelection(Attending.yes),
+                child: Text('YES'),
+              ),
+              SizedBox(width: 8),
+              StyledButton(
+                onPressed: () => onSelection(Attending.no),
+                child: Text('NO'),
+              ),
+            ],
+          ),
+        );
+    }
+  }
 }
