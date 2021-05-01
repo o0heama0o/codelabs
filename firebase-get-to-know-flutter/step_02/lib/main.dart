@@ -109,6 +109,8 @@ class HomePage extends StatelessWidget {
                   GuestBook(
                     addMessage: (String message) =>
                         appState.addMessageToGuestBook(message),
+                    deleteMessage: (String message) =>
+                        appState.deleteMessageToGuestBook(message),
                     messages: appState.guestBookMessages,
                   ),
                 ],
@@ -121,7 +123,7 @@ class HomePage extends StatelessWidget {
   }
 }
 
-//----------------for login(Firebase Athentication)----------------
+//----------------ChangeNotifier----------------
 class ApplicationState extends ChangeNotifier {
   ApplicationState() {
     init();
@@ -144,25 +146,23 @@ class ApplicationState extends ChangeNotifier {
     //로그인하기 (firebase로 부터 로그인 여부가 들어오는지 계속 listen하고있음)
     FirebaseAuth.instance.userChanges().listen((user) {
       if (user != null) {
-        //login이 되어있는 거니까 state를 login으로 바꿈
-        _loginState = ApplicationLoginState.loggedIn;
-        //login이 되어있는 거니까 cloud firestore 사용 준비
-        _guestBookSubscription = FirebaseFirestore.instance
+        _loginState = ApplicationLoginState.loggedIn;//login이 되어있는 거니까 state를 login으로 바꿈
+        _guestBookSubscription = FirebaseFirestore.instance//login이 되어있는 거니까 cloud firestore 사용 준비
             .collection('guestbook')
             .orderBy('timestamp', descending: true)
             .snapshots()
             .listen((snapshot) {
-          _guestBookMessages = [];
-          snapshot.docs.forEach((document) {
-            _guestBookMessages.add(
-              GuestBookMessage(
-                name: document.data()['name'],
-                message: document.data()['text'],
-              ),
-            );
-          });
-          notifyListeners();
-        });
+              _guestBookMessages = [];
+              snapshot.docs.forEach((document) {
+                _guestBookMessages.add(
+                  GuestBookMessage(
+                    name: document.data()['name'],
+                    message: document.data()['text'],
+                  ),
+                );
+              });
+              notifyListeners();
+            });
         _attendingSubscription = FirebaseFirestore.instance
             .collection('attendees')
             .doc(user.uid)
@@ -284,6 +284,7 @@ class ApplicationState extends ChangeNotifier {
     FirebaseAuth.instance.signOut();
   }
 
+  //add message
   Future<DocumentReference> addMessageToGuestBook(String message) {
     if (_loginState != ApplicationLoginState.loggedIn) {
       throw Exception('Must be logged in');
@@ -296,6 +297,21 @@ class ApplicationState extends ChangeNotifier {
       'userId': FirebaseAuth.instance.currentUser!.uid,
     });
   }
+
+  Future<void> deleteMessageToGuestBook(String message) async {//delete 추가
+    if (_loginState != ApplicationLoginState.loggedIn) {
+      throw Exception('Must be logged in');
+    }
+    var docID;
+    final gestbookRef = FirebaseFirestore.instance.collection('guestbook');
+    await gestbookRef.where('text', isEqualTo: '$message').get().then((QuerySnapshot snapshot) {
+       snapshot.docs.forEach((document){
+         docID = document.id;
+       });
+    });
+   return FirebaseFirestore.instance.collection('guestbook').doc('$docID').delete().then((value) => print('deleted'));
+  }
+
 }
 
 
@@ -307,12 +323,14 @@ class GuestBookMessage {
   final String message;
 }
 
+
 enum Attending { yes, no, unknown }
 
 //새 상태 저장을 위한 위젯
 class GuestBook extends StatefulWidget {
-  GuestBook({required this.addMessage, required this.messages});
+  GuestBook({required this.addMessage,required this.deleteMessage, required this.messages});
   final FutureOr<void> Function(String message) addMessage;
+  final FutureOr<void> Function(String message) deleteMessage; //delete 추가
   final List<GuestBookMessage> messages;
 
   @override
@@ -373,7 +391,25 @@ class _GuestBookState extends State<GuestBook> {
         // Modify from here
         SizedBox(height: 8),
         for (var message in widget.messages)
-          Paragraph('${message.name}: ${message.message}'),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child:Paragraph('${message.name}: ${message.message}'),
+              ),
+
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: IconButton(
+                  icon: Icon(Icons.delete_outline),
+                  onPressed: (){
+                    
+                    widget.deleteMessage('${message.message}');
+                  },
+                ),
+              ),
+            ],
+          ),
         SizedBox(height: 8),
         SizedBox(
           height: 8,
