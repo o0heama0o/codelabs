@@ -10,6 +10,8 @@ import 'src/authentication.dart';
 import 'src/widgets.dart';
 
 
+//bool result = false;
+
 void main() async{
   //WidgetsFlutterBinding.ensureInitialized();
   //await Firebase.initializeApp();
@@ -111,7 +113,12 @@ class HomePage extends StatelessWidget {
                         appState.addMessageToGuestBook(message),
                     deleteMessage: (String message) =>
                         appState.deleteMessageToGuestBook(message),
+                    getUserId: (String message)=>
+                        appState.getUserId(message),
+                    //checkingMyMessage:(String message) =>
+                      //  appState.checkingMyMessage(message),
                     messages: appState.guestBookMessages,
+                    getUid: appState.getUid,
                   ),
                 ],
               ],
@@ -158,6 +165,8 @@ class ApplicationState extends ChangeNotifier {
                   GuestBookMessage(
                     name: document.data()['name'],
                     message: document.data()['text'],
+                    //currentUser: user.uid,
+                    //userId: document.data()['userId'],
                   ),
                 );
               });
@@ -284,6 +293,16 @@ class ApplicationState extends ChangeNotifier {
     FirebaseAuth.instance.signOut();
   }
 
+  String getUid2() {
+    print('docUid : ${FirebaseAuth.instance.currentUser!.uid}');
+    return FirebaseAuth.instance.currentUser!.uid;
+  }
+
+  Future<String> getUid() async{
+    print('docUid : ${FirebaseAuth.instance.currentUser!.uid}');
+    return await FirebaseAuth.instance.currentUser!.uid;
+  }
+
   //add message
   Future<DocumentReference> addMessageToGuestBook(String message) {
     if (_loginState != ApplicationLoginState.loggedIn) {
@@ -311,6 +330,60 @@ class ApplicationState extends ChangeNotifier {
     });
    return FirebaseFirestore.instance.collection('guestbook').doc('$docID').delete().then((value) => print('deleted'));
   }
+  /*
+  Future<bool> checkingMyMessage(String message) async{
+    var currentUser = FirebaseAuth.instance.currentUser!.uid;
+    var docUserId;
+    bool myMessage = false;
+    final gestbookRef = FirebaseFirestore.instance.collection('guestbook');
+    await gestbookRef.where('text', isEqualTo: '$message').get().then((QuerySnapshot snapshot) {
+      snapshot.docs.forEach((document){
+        docUserId = document.data()['userId'];
+        if(docUserId == currentUser) myMessage = true;
+        else myMessage = false;
+      });
+    });
+    return myMessage;
+  }
+  */
+  String getUserId2(String message) {
+    var docUserId = 'hi';
+    FirebaseFirestore.instance
+        .collection('guestbook')
+        .where('text', isEqualTo: '$message')
+        .snapshots()
+        .listen((snapshot){
+          snapshot.docs.forEach((document){
+            docUserId = document.data()['userId'];
+            print('docUserId : $docUserId');
+          });
+        });
+    return docUserId;
+  }
+
+  Future<String> getUserId(String message) async{
+    //var uid =  await FirebaseAuth.instance.currentUser!.uid;
+
+    String docUserId = 'hi';
+    var docID;
+    final gestbookRef = FirebaseFirestore.instance.collection('guestbook');
+    await gestbookRef.where('text', isEqualTo: '$message').get().then((QuerySnapshot snapshot) {
+      snapshot.docs.forEach((document){
+        docID = document.id;
+      });
+    });
+
+    await FirebaseFirestore.instance.collection('guestbook').doc(docID).get().then((DocumentSnapshot document){
+      print(document['userId']);
+      docUserId = document['userId'];
+    });
+    //result = false;
+    //print('compare docUserId : $docUserId');
+    //print('compare uid : $uid');
+    //if(docUserId == uid) {result = true; print('same');}
+
+    return docUserId;
+  }
 
 }
 
@@ -328,9 +401,14 @@ enum Attending { yes, no, unknown }
 
 //새 상태 저장을 위한 위젯
 class GuestBook extends StatefulWidget {
-  GuestBook({required this.addMessage,required this.deleteMessage, required this.messages});
+  GuestBook({required this.addMessage,required this.deleteMessage, required this.getUserId, required this.messages, required this.getUid});
   final FutureOr<void> Function(String message) addMessage;
   final FutureOr<void> Function(String message) deleteMessage; //delete 추가
+  //final String Function() getUid;
+  //final String Function(String message) getUserId;
+  final FutureOr<String> Function() getUid;
+  final FutureOr<String> Function(String message) getUserId;
+  //final FutureOr<bool> Function(String message) checkingMyMessage;
   final List<GuestBookMessage> messages;
 
   @override
@@ -341,9 +419,22 @@ class _GuestBookState extends State<GuestBook> {
   final _formKey = GlobalKey<FormState>(debugLabel: '_GuestBookState');
   final _controller = TextEditingController();
 
+  var now = DateTime.now();
+  //bool result = false;
+
+  Future<String> checking (String message) async{
+    var result = ' ';
+    var one = await widget.getUserId('${message}');
+    var two = await widget.getUid();
+    //result = false;
+    if(one == two){print('same!!!!'); result = 'true';}
+    return result;
+  }
+
   @override
   // Modify from here
   Widget build(BuildContext context) {
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -375,6 +466,7 @@ class _GuestBookState extends State<GuestBook> {
                       await widget.addMessage(_controller.text);
                       _controller.clear();
                     }
+
                   },
                   child: Row(
                     children: [
@@ -395,19 +487,38 @@ class _GuestBookState extends State<GuestBook> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child:Paragraph('${message.name}: ${message.message}'),
-              ),
-
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: IconButton(
-                  icon: Icon(Icons.delete_outline),
-                  onPressed: (){
-                    
-                    widget.deleteMessage('${message.message}');
-                  },
+                child: Column(
+                  crossAxisAlignment : CrossAxisAlignment.start,
+                  children: [
+                    Paragraph('${message.name}: ${message.message}'),
+                    Text('  $now'),
+                  ],
                 ),
               ),
+
+              FutureBuilder(
+                future: checking('${message.message}'),
+                builder:(context, snapshot) {
+                  //return result? Text('a'): Text('b');
+                  return Stack(
+                    children: snapshot.data.toString() == 'true'
+                        ? [
+                            IconButton(
+                              icon: Icon(Icons.delete_outline),
+                              onPressed: () {
+                                widget.deleteMessage('${message.message}');
+                              },
+                            )
+                        ]
+                        :[
+                            SizedBox(width: 5,)
+                        ]
+                  );
+                },
+              ),
+
+
+
             ],
           ),
         SizedBox(height: 8),
