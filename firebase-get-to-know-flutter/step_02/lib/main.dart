@@ -293,11 +293,6 @@ class ApplicationState extends ChangeNotifier {
     FirebaseAuth.instance.signOut();
   }
 
-  String getUid2() {
-    print('docUid : ${FirebaseAuth.instance.currentUser!.uid}');
-    return FirebaseAuth.instance.currentUser!.uid;
-  }
-
   Future<String> getUid() async{
     print('docUid : ${FirebaseAuth.instance.currentUser!.uid}');
     return await FirebaseAuth.instance.currentUser!.uid;
@@ -330,39 +325,8 @@ class ApplicationState extends ChangeNotifier {
     });
    return FirebaseFirestore.instance.collection('guestbook').doc('$docID').delete().then((value) => print('deleted'));
   }
-  /*
-  Future<bool> checkingMyMessage(String message) async{
-    var currentUser = FirebaseAuth.instance.currentUser!.uid;
-    var docUserId;
-    bool myMessage = false;
-    final gestbookRef = FirebaseFirestore.instance.collection('guestbook');
-    await gestbookRef.where('text', isEqualTo: '$message').get().then((QuerySnapshot snapshot) {
-      snapshot.docs.forEach((document){
-        docUserId = document.data()['userId'];
-        if(docUserId == currentUser) myMessage = true;
-        else myMessage = false;
-      });
-    });
-    return myMessage;
-  }
-  */
-  String getUserId2(String message) {
-    var docUserId = 'hi';
-    FirebaseFirestore.instance
-        .collection('guestbook')
-        .where('text', isEqualTo: '$message')
-        .snapshots()
-        .listen((snapshot){
-          snapshot.docs.forEach((document){
-            docUserId = document.data()['userId'];
-            print('docUserId : $docUserId');
-          });
-        });
-    return docUserId;
-  }
 
   Future<String> getUserId(String message) async{
-    //var uid =  await FirebaseAuth.instance.currentUser!.uid;
 
     String docUserId = 'hi';
     var docID;
@@ -377,10 +341,6 @@ class ApplicationState extends ChangeNotifier {
       print(document['userId']);
       docUserId = document['userId'];
     });
-    //result = false;
-    //print('compare docUserId : $docUserId');
-    //print('compare uid : $uid');
-    //if(docUserId == uid) {result = true; print('same');}
 
     return docUserId;
   }
@@ -404,11 +364,8 @@ class GuestBook extends StatefulWidget {
   GuestBook({required this.addMessage,required this.deleteMessage, required this.getUserId, required this.messages, required this.getUid});
   final FutureOr<void> Function(String message) addMessage;
   final FutureOr<void> Function(String message) deleteMessage; //delete 추가
-  //final String Function() getUid;
-  //final String Function(String message) getUserId;
   final FutureOr<String> Function() getUid;
   final FutureOr<String> Function(String message) getUserId;
-  //final FutureOr<bool> Function(String message) checkingMyMessage;
   final List<GuestBookMessage> messages;
 
   @override
